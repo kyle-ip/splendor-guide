@@ -996,8 +996,19 @@ html[data-practice-focus] .practice-board {
 .card-land {
   animation: card-land 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+.card-market-lift {
+  transform: translateY(-8px) scale(1.04);
+  box-shadow: 0 10px 24px rgba(44, 36, 28, 0.22);
+  filter: brightness(1.06);
+  transition:
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
+  z-index: 18;
+  pointer-events: none;
+}
 .card-purchase-exit {
-  animation-duration: 0.52s;
+  animation-duration: 0.5s;
   animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   animation-fill-mode: forwards;
   z-index: 20;
@@ -1011,6 +1022,13 @@ html[data-practice-focus] .practice-board {
 }
 .card-purchase-exit--ai {
   animation-name: card-purchase-exit-automa;
+}
+.card-deal-in {
+  animation: card-deal-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.card-slot-slide {
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
 }
 .card-slot-refill {
   animation: card-slot-refill 0.45s ease 0.38s both;
@@ -1111,12 +1129,13 @@ html[data-practice-focus] .practice-board {
 }
 @keyframes card-purchase-exit-player {
   0% {
-    transform: scale(1) rotate(0deg);
+    transform: translateY(-8px) scale(1.04) rotate(0deg);
     opacity: 1;
-    filter: brightness(1);
+    filter: brightness(1.06);
+    box-shadow: 0 10px 24px rgba(44, 36, 28, 0.22);
   }
-  25% {
-    transform: scale(1.08) rotate(-2deg);
+  28% {
+    transform: translateY(-10px) scale(1.1) rotate(-2deg);
     opacity: 1;
     filter: brightness(1.12);
     box-shadow: 0 8px 28px rgba(212, 175, 55, 0.45);
@@ -1129,12 +1148,13 @@ html[data-practice-focus] .practice-board {
 }
 @keyframes card-purchase-exit-automa {
   0% {
-    transform: scale(1) rotate(0deg);
+    transform: translateY(-8px) scale(1.04) rotate(0deg);
     opacity: 1;
-    filter: brightness(1);
+    filter: brightness(1.06);
+    box-shadow: 0 10px 24px rgba(44, 36, 28, 0.22);
   }
-  25% {
-    transform: scale(1.08) rotate(2deg);
+  28% {
+    transform: translateY(-10px) scale(1.1) rotate(2deg);
     opacity: 1;
     filter: brightness(1.08);
     box-shadow: 0 8px 28px rgba(61, 50, 40, 0.35);
@@ -1143,6 +1163,20 @@ html[data-practice-focus] .practice-board {
     transform: scale(0.72) translateY(-64px) translateX(20px) rotate(-5deg);
     opacity: 0;
     filter: brightness(0.88);
+  }
+}
+@keyframes card-deal-in {
+  0% {
+    transform: translate(-18px, -14px) scale(0.88) rotate(-4deg);
+    opacity: 0;
+  }
+  55% {
+    transform: translate(1px, 2px) scale(1.03) rotate(1deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    opacity: 1;
   }
 }
 @keyframes card-slot-refill {
@@ -1728,7 +1762,10 @@ html[data-practice-focus] .duel-card-row {
   .drop-zone-live.is-armed::after,
   .gem-land,
   .card-land,
+  .card-market-lift,
   .card-purchase-exit,
+  .card-deal-in,
+  .card-slot-slide,
   .card-slot-refill,
   .dice-roll-scrim,
   .dice-roll-stage,

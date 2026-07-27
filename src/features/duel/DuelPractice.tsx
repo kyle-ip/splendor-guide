@@ -5,6 +5,7 @@ import { pushCappedHistory } from '@/lib/practiceHistory';
 import { loadSession, saveSession, clearSession } from '@/lib/practiceSession';
 import { PracticeShell, usePracticeChromeOptional } from '@/features/solo/shared';
 import { useSoloToast } from '@/features/solo/SoloToast';
+import { usePurchaseFx } from '@/features/solo/PurchaseFx';
 import {
   useTurnPulseOnChange,
   useWinCelebrateOnce,
@@ -44,6 +45,7 @@ function pushHistory(history: DuelGameState[], snapshot: DuelGameState) {
 export function DuelPractice() {
   const { t } = useI18n();
   const toast = useSoloToast();
+  const purchaseFx = usePurchaseFx();
 
   const [setup, setSetup] = useState<DuelSetupValues>(() => {
     const saved = loadSession<DuelSession>(DUEL_SESSION_KEY);
@@ -103,9 +105,39 @@ export function DuelPractice() {
 
   useEffect(() => {
     if (!state || !isAiTurn(state) || state.phase === 'done') return;
+    if (purchaseFx.isAnimating) return;
     const id = window.setTimeout(() => {
       const action = chooseDuelAiAction(state);
       if (!action) return;
+
+      if (action.type === 'buy' && action.from === 'pyramid') {
+        purchaseFx.run(action.cardId, 'ai', () => {
+          setState((prev) => {
+            if (!prev) return prev;
+            setHistory((h) => pushHistory(h, prev));
+            return applyAction(prev, action);
+          });
+          setSelectedIndices([]);
+          setReserveGoldIndex(null);
+          setPrivilegeMode(false);
+        });
+        return;
+      }
+
+      if (action.type === 'reserve' && action.source.kind === 'pyramid') {
+        purchaseFx.run(action.source.cardId, 'ai', () => {
+          setState((prev) => {
+            if (!prev) return prev;
+            setHistory((h) => pushHistory(h, prev));
+            return applyAction(prev, action);
+          });
+          setSelectedIndices([]);
+          setReserveGoldIndex(null);
+          setPrivilegeMode(false);
+        });
+        return;
+      }
+
       setState((prev) => {
         if (!prev) return prev;
         setHistory((h) => pushHistory(h, prev));
@@ -116,7 +148,7 @@ export function DuelPractice() {
       setPrivilegeMode(false);
     }, AI_DELAY_MS);
     return () => window.clearTimeout(id);
-  }, [state]);
+  }, [state, purchaseFx.isAnimating, purchaseFx]);
 
   const commit = (next: DuelGameState, prev: DuelGameState) => {
     setHistory((h) => pushHistory(h, prev));
@@ -167,7 +199,8 @@ export function DuelPractice() {
     Boolean(playing && state) &&
     currentSeat(state!).isHuman &&
     state!.phase !== 'done' &&
-    state!.phase !== 'aiBusy';
+    state!.phase !== 'aiBusy' &&
+    !purchaseFx.isAnimating;
 
   const subtitle = useMemo(() => {
     if (!state) return t('duelIntroShort');
@@ -262,29 +295,36 @@ export function DuelPractice() {
   };
 
   const onBuyPyramid = (card: DuelJewelCard, level: 1 | 2 | 3) => {
-    if (!humanActive) return;
+    if (!humanActive || purchaseFx.isAnimating) return;
     if (!canAffordDuelCard(card, seat.hand, seat.bonuses)) return;
-    commit(
-      applyAction(state, {
-        type: 'buy',
-        cardId: card.id,
-        from: 'pyramid',
-        level,
-      }),
-      state,
-    );
+    purchaseFx.run(card.id, 'player', () => {
+      commit(
+        applyAction(state, {
+          type: 'buy',
+          cardId: card.id,
+          from: 'pyramid',
+          level,
+        }),
+        state,
+      );
+    });
   };
 
   const onReservePyramid = (card: DuelJewelCard, level: 1 | 2 | 3) => {
-    if (!humanActive || reserveGoldIndex === null) return;
-    commit(
-      applyAction(state, {
-        type: 'reserve',
-        goldIndex: reserveGoldIndex,
-        source: { kind: 'pyramid', cardId: card.id, level },
-      }),
-      state,
-    );
+    if (!humanActive || reserveGoldIndex === null || purchaseFx.isAnimating) {
+      return;
+    }
+    const goldIndex = reserveGoldIndex;
+    purchaseFx.run(card.id, 'player', () => {
+      commit(
+        applyAction(state, {
+          type: 'reserve',
+          goldIndex,
+          source: { kind: 'pyramid', cardId: card.id, level },
+        }),
+        state,
+      );
+    });
   };
 
   const onReserveDeck = (level: 1 | 2 | 3) => {

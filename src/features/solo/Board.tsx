@@ -482,7 +482,9 @@ export function CardRow({
       </div>
       {Array.from({ length: 4 }).map((_, i) => {
         const card = cards[i];
+        const lifting = card && purchaseFx?.isLifting(card.id);
         const exiting = card && purchaseFx?.isExiting(card.id);
+        const landing = card && purchaseFx?.isLanding(card.id);
         const exitBuyer = purchaseFx?.exitBuyer;
         return (
           <div
@@ -492,10 +494,14 @@ export function CardRow({
             {card ? (
               <div
                 data-solo-card={card.id}
-                className={`relative transition-none w-full ${
-                  exiting && exitBuyer
-                    ? `card-purchase-exit card-purchase-exit--${exitBuyer}`
-                    : ''
+                className={`relative w-full ${
+                  lifting
+                    ? 'card-market-lift'
+                    : exiting && exitBuyer
+                      ? `card-purchase-exit card-purchase-exit--${exitBuyer}`
+                      : landing
+                        ? 'card-deal-in'
+                        : 'transition-none'
                 }`}
               >
                 {renderCard(card, i)}

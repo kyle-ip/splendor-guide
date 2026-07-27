@@ -195,22 +195,22 @@ export function StandardPractice() {
   const isHumanSeat =
     Boolean(state && humanSeat && state.currentSeat === humanSeat.id);
 
-  // Only block on the human's own purchase FX — AI card-exit FX must not
-  // freeze the human seat after the turn has already advanced.
+  // Block the human seat for their own market FX (lift→exit→settle).
+  // AI FX keeps phase on the AI seat until apply, so it won't freeze the human.
   const humanMainTurn =
     isHumanSeat &&
     state?.phase === 'human' &&
-    purchaseFx.exitBuyer !== 'player';
+    !purchaseFx.isAnimating;
 
   const humanChoosingNoble =
     isHumanSeat &&
     state?.phase === 'chooseNoble' &&
-    purchaseFx.exitBuyer !== 'player';
+    !purchaseFx.isAnimating;
 
   const humanDiscarding =
     isHumanSeat &&
     state?.phase === 'discardGems' &&
-    purchaseFx.exitBuyer !== 'player';
+    !purchaseFx.isAnimating;
 
   /** Keep viewport from auto-jumping on gem takes; manual scroll still works. */
   const lockScroll = Boolean(playing && state && state.phase !== 'done');
@@ -247,8 +247,7 @@ export function StandardPractice() {
     if (state.phase === 'human') return;
     if (state.phase === 'chooseNoble' && currentSeat(state).isHuman) return;
     if (state.phase === 'discardGems' && currentSeat(state).isHuman) return;
-    // Wait only for the human's purchase FX — never for AI animation locks.
-    if (purchaseFx.exitBuyer === 'player') return;
+    if (purchaseFx.isAnimating) return;
 
     const delay = fastAi ? AI_FAST_MS : AI_DELAY_MS;
     const timer = window.setTimeout(() => {
@@ -279,12 +278,6 @@ export function StandardPractice() {
           return applyAction(s, action) ?? s;
         }
 
-        if (action.type === 'reserve' && s.bank.gold > 0) {
-          queueMicrotask(() =>
-            bankFx.take('gold', { toward: 'up', seatId }),
-          );
-        }
-
         if (action.type === 'claimNoble') {
           queueMicrotask(() => {
             ceremonyFx.nobleVisit(action.nobleId, seatId);
@@ -294,24 +287,52 @@ export function StandardPractice() {
 
         if (action.type === 'buy') {
           const found = findCard(s, action.cardId);
-          if (found) {
-            const paidPreview = payForCard(
-              currentSeat(s).hand,
-              found.card.cost,
-              currentSeat(s).bonuses,
+          if (!found) return applyAction(s, action) ?? s;
+
+          const paidPreview = payForCard(
+            currentSeat(s).hand,
+            found.card.cost,
+            currentSeat(s).bonuses,
+          );
+          if (paidPreview) {
+            queueMicrotask(() =>
+              bankFx.spendDiff(currentSeat(s).hand, paidPreview, {
+                fromSeatId: seatId,
+              }),
             );
-            if (paidPreview) {
-              queueMicrotask(() =>
-                bankFx.spendDiff(currentSeat(s).hand, paidPreview, {
-                  fromSeatId: seatId,
-                }),
-              );
-            }
-            queueMicrotask(() => {
-              purchaseFx.run(found.card.id, 'ai', () => {});
-            });
-            return applyAction(s, action) ?? s;
           }
+
+          // Display buys: animate first, then apply. Reserved buys apply now.
+          if (found.level !== 'reserved') {
+            queueMicrotask(() => {
+              purchaseFx.run(found.card.id, 'ai', () => {
+                setState((prev) => {
+                  if (!prev) return prev;
+                  return applyAction(prev, action) ?? prev;
+                });
+              });
+            });
+            return s;
+          }
+
+          return applyAction(s, action) ?? s;
+        }
+
+        if (action.type === 'reserve') {
+          if (s.bank.gold > 0) {
+            queueMicrotask(() =>
+              bankFx.take('gold', { toward: 'up', seatId }),
+            );
+          }
+          queueMicrotask(() => {
+            purchaseFx.run(action.cardId, 'ai', () => {
+              setState((prev) => {
+                if (!prev) return prev;
+                return applyAction(prev, action) ?? prev;
+              });
+            });
+          });
+          return s;
         }
 
         return applyAction(s, action) ?? s;
@@ -326,7 +347,7 @@ export function StandardPractice() {
     state?.discardNeeded,
     state?.pendingNobles.length,
     fastAi,
-    purchaseFx.exitBuyer,
+    purchaseFx.isAnimating,
     bankFx,
     ceremonyFx,
     purchaseFx,
@@ -371,24 +392,27 @@ export function StandardPractice() {
   };
 
   const reserve = (cardId: string) => {
-    setState((s) => {
-      if (!s || s.phase !== 'human') return s;
-      if (!currentSeat(s).isHuman) return s;
-      if (s.pendingTake.length > 0) return s;
-      const found = findCard(s, cardId);
-      if (!found || found.level === 'reserved') return s;
-      if (s.bank.gold > 0) {
-        queueMicrotask(() => bankFx.take('gold', { toward: 'down' }));
-      }
-      noteMissedDenial(s, currentSeat(s).id, { type: 'reserve', cardId });
-      pushHistory(s);
-      return (
-        applyAction(s, {
-          type: 'reserve',
-          cardId,
-          level: found.level,
-        }) ?? s
-      );
+    if (!state || !humanMainTurn) return;
+    if (purchaseFx.isAnimating) return;
+    const found = findCard(state, cardId);
+    if (!found || found.level === 'reserved') return;
+    const level = found.level;
+    if (state.bank.gold > 0) {
+      bankFx.take('gold', { toward: 'down' });
+    }
+    noteMissedDenial(state, currentSeat(state).id, { type: 'reserve', cardId });
+    purchaseFx.run(cardId, 'player', () => {
+      setState((s) => {
+        if (!s) return s;
+        pushHistory(s);
+        return (
+          applyAction(s, {
+            type: 'reserve',
+            cardId,
+            level,
+          }) ?? s
+        );
+      });
     });
   };
 
@@ -398,13 +422,31 @@ export function StandardPractice() {
     level?: 1 | 2 | 3,
   ) => {
     if (!state || !humanMainTurn || state.pendingTake.length > 0) return;
-    if (purchaseFx.exitBuyer === 'player') return;
+    if (purchaseFx.isAnimating) return;
     if (!humanSeat) return;
     const paidPreview = payForCard(humanSeat.hand, card.cost, humanSeat.bonuses);
     if (!paidPreview) return;
 
     noteMissedDenial(state, humanSeat.id, { type: 'buy', cardId: card.id });
     bankFx.spendDiff(humanSeat.hand, paidPreview);
+
+    if (from === 'reserved') {
+      // Reserved buys leave the market unchanged — apply immediately.
+      setState((s) => {
+        if (!s) return s;
+        pushHistory(s);
+        return (
+          applyAction(s, {
+            type: 'buy',
+            cardId: card.id,
+            from,
+            level,
+          }) ?? s
+        );
+      });
+      return;
+    }
+
     purchaseFx.run(card.id, 'player', () => {
       setState((s) => {
         if (!s) return s;

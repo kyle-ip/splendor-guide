@@ -9,6 +9,7 @@ import { useI18n } from '@/i18n/I18nProvider';
 import type { MessageKey } from '@/i18n/messages';
 import type { DuelGameState } from './types';
 import { BOARD_DIM } from './engine';
+import { usePurchaseFxOptional } from '@/features/solo/PurchaseFx';
 
 const LEVEL_BAND: Record<1 | 2 | 3, string> = {
   1: 'bg-[#6b8f78]',
@@ -198,9 +199,11 @@ export function DuelBoard({
   takeMatchingColor: DuelGem | null;
 }) {
   const { t } = useI18n();
+  const purchaseFx = usePurchaseFxOptional();
   const seat = state.seats[state.currentSeat];
   const canAct =
     seat.isHuman &&
+    !purchaseFx?.isAnimating &&
     (state.phase === 'optional' ||
       state.phase === 'main' ||
       state.phase === 'chooseRoyal' ||
@@ -227,33 +230,46 @@ export function DuelBoard({
       {row.map((card, i) =>
         card ? (
           <div key={card.id} className="min-w-0">
-            <DuelJewelTile
-              card={card}
-              bonuses={seat.bonuses}
-              affordable={
-                canAct &&
-                canAffordDuelCard(card, seat.hand, seat.bonuses) &&
-                reserveGoldIndex === null
-              }
-              onClick={
-                canAct
-                  ? () => {
-                      if (reserveGoldIndex !== null) {
-                        onReservePyramid(card, level);
-                      } else if (
-                        canAffordDuelCard(card, seat.hand, seat.bonuses)
-                      ) {
-                        onBuyPyramid(card, level);
+            <div
+              data-solo-card={card.id}
+              className={`relative w-full ${
+                purchaseFx?.isLifting(card.id)
+                  ? 'card-market-lift'
+                  : purchaseFx?.isExiting(card.id) && purchaseFx.exitBuyer
+                    ? `card-purchase-exit card-purchase-exit--${purchaseFx.exitBuyer}`
+                    : purchaseFx?.isLanding(card.id)
+                      ? 'card-deal-in'
+                      : ''
+              }`}
+            >
+              <DuelJewelTile
+                card={card}
+                bonuses={seat.bonuses}
+                affordable={
+                  canAct &&
+                  canAffordDuelCard(card, seat.hand, seat.bonuses) &&
+                  reserveGoldIndex === null
+                }
+                onClick={
+                  canAct
+                    ? () => {
+                        if (reserveGoldIndex !== null) {
+                          onReservePyramid(card, level);
+                        } else if (
+                          canAffordDuelCard(card, seat.hand, seat.bonuses)
+                        ) {
+                          onBuyPyramid(card, level);
+                        }
                       }
-                    }
-                  : undefined
-              }
-            />
+                    : undefined
+                }
+              />
+            </div>
           </div>
         ) : (
           <div
             key={`empty-${level}-${i}`}
-            className="solo-card-face border border-dashed border-splendor-line/50 rounded-sm"
+            className="solo-card-face border border-dashed border-splendor-line/50 rounded-sm card-slot-refill"
           />
         ),
       )}
