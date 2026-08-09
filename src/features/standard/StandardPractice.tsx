@@ -581,7 +581,7 @@ export function StandardPractice() {
             ) : undefined}
           </ReserveDropZone>
           {hints.enabled && (
-            <div className="border-t border-splendor-line/25 pt-2 h-[6.75rem] overflow-y-auto overscroll-contain space-y-1.5 [scrollbar-width:thin]">
+            <div className="border-t border-splendor-line/25 pt-2 h-[6.75rem] overflow-y-auto overscroll-contain space-y-1.5">
               <p className="text-[10px] font-serif text-splendor-muted/80 leading-snug px-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5">
                 <span className="inline-flex items-center gap-1">
                   <svg
